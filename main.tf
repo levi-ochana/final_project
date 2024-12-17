@@ -135,6 +135,16 @@ resource "aws_lb_target_group" "my_target_group" {
   tags = {
     Name = "ecs-target-group"
   }
+
+  health_check {
+    path                = "/health"
+    interval            = 15
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+    protocol            = "HTTP"
+    port                = 80
+  }
 }
 
 # Create ECS Cluster
@@ -186,16 +196,16 @@ resource "aws_ecs_task_definition" "task" {
   network_mode             = "awsvpc"
   execution_role_arn       = aws_iam_role.ecs_task_role.arn  
   requires_compatibilities = ["FARGATE"]
-  cpu                      = "1024"
-  memory                   = "2048"
+  cpu                      = "256"
+  memory                   = "512"
 
   container_definitions = <<DEFINITION
 [{
   "name": "my-container",
   "image": "888577038689.dkr.ecr.us-west-2.amazonaws.com/my-ecr-repository",  
   "essential": true,
-  "memory": 2048,
-  "cpu": 1024,
+  "memory": 512,
+  "cpu": 256,
   "portMappings": [{
     "containerPort": 80,
     "hostPort": 80
@@ -222,7 +232,7 @@ resource "aws_ecs_service" "fargate_service" {
   name            = "fargate-service"
   cluster         = aws_ecs_cluster.fargate_cluster.id
   task_definition = aws_ecs_task_definition.task.arn
-  desired_count   = 1
+  desired_count   = 2
   launch_type     = "FARGATE"
 
   network_configuration {
