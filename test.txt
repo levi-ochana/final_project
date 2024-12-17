@@ -1,0 +1,20 @@
+
+aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin {account_number}.dkr.ecr.us-west-2.amazonaws.com
+
+docker build -t hello-world-nginx .
+aws ecr create-repository --repository-name my-ecr-repository --region us-west-2
+
+docker tag hello-world-nginx {account_number}.dkr.ecr.us-west-2.amazonaws.com/my-ecr-repository:latest
+docker push {account_number}.dkr.ecr.us-west-2.amazonaws.com/my-ecr-repository:latest
+
+
+
+
+
+
+
+aws ecs list-tasks --cluster <cluster-name> --desired-status RUNNING --output text | wc -w
+
+ab -n 1000 -c 100 http://<load-balancer-url> &
+ab -n 1000 -c 100 http://<load-balancer-url> &
+ab -n 1000 -c 100 http://<load-balancer-url> &
