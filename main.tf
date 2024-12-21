@@ -113,18 +113,6 @@ resource "aws_lb" "main" {
   }
 }
 
-# Create Listener for Load Balancer
-resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.main.arn
-  port              = "80"
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.my_target_group.arn
-  }
-}
-
 # Create Target Group
 resource "aws_lb_target_group" "my_target_group" {
   name        = "ecs-target-group"
@@ -146,6 +134,19 @@ resource "aws_lb_target_group" "my_target_group" {
     port                = 80
   }
 }
+
+# Create Listener for Load Balancer
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = "80"
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.my_target_group.arn
+  }
+}
+
 
 # Create ECS Cluster
 resource "aws_ecs_cluster" "fargate_cluster" {
@@ -251,6 +252,99 @@ resource "aws_ecs_service" "fargate_service" {
     Name = "fargate-service"
   }
 }
+
+# Auto Scaling Target
+resource "aws_appautoscaling_target" "ecs_service_target" {
+  max_capacity       = 4
+  min_capacity       = 2
+  resource_id        = "service/${aws_ecs_cluster.fargate_cluster.name}/${aws_ecs_service.fargate_service.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+# Scaling Policy to Increase Tasks
+resource "aws_appautoscaling_policy" "scale_up" {
+  name               = "ecs-scale-up"
+  policy_type        = "StepScaling"
+  resource_id        = aws_appautoscaling_target.ecs_service_target.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs_service_target.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs_service_target.service_namespace
+
+  step_scaling_policy_configuration {
+    adjustment_type = "ChangeInCapacity"
+    step_adjustment {
+      scaling_adjustment = 1
+      metric_interval_lower_bound = 0
+    }
+    cooldown = 60
+  }
+}
+
+# Scaling Policy to Decrease Tasks
+resource "aws_appautoscaling_policy" "scale_down" {
+  name               = "ecs-scale-down"
+  policy_type        = "StepScaling"
+  resource_id        = aws_appautoscaling_target.ecs_service_target.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs_service_target.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs_service_target.service_namespace
+
+  step_scaling_policy_configuration {
+    adjustment_type = "ChangeInCapacity"
+    step_adjustment {
+      scaling_adjustment = -1
+      metric_interval_upper_bound = 0
+    }
+    cooldown = 60
+  }
+}
+
+# CloudWatch Alarm for High CPU Utilization
+resource "aws_cloudwatch_metric_alarm" "high_cpu_utilization" {
+  alarm_name          = "ecs-high-cpu"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/ECS"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 70
+
+  dimensions = {
+    ClusterName = aws_ecs_cluster.fargate_cluster.name
+    ServiceName = aws_ecs_service.fargate_service.name
+  }
+
+  alarm_actions = [aws_appautoscaling_policy.scale_up.arn]
+}
+
+# CloudWatch Alarm for Low CPU Utilization
+resource "aws_cloudwatch_metric_alarm" "low_cpu_utilization" {
+  alarm_name          = "ecs-low-cpu"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/ECS"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 30
+
+  dimensions = {
+    ClusterName = aws_ecs_cluster.fargate_cluster.name
+    ServiceName = aws_ecs_service.fargate_service.name
+  }
+
+  # Set to only trigger scale down if the desired count is above 2
+  alarm_actions = [
+    aws_appautoscaling_policy.scale_down.arn
+  ]
+  
+  # Add a condition to prevent scaling below 2 tasks
+  insufficient_data_actions = []
+  ok_actions               = []
+}
+
+
+
 
 # Output ECS Service URL
 output "ecs_service_url" {

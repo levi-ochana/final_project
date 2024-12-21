@@ -18,3 +18,7 @@ aws ecs list-tasks --cluster <cluster-name> --desired-status RUNNING --output te
 ab -n 1000 -c 100 http://<load-balancer-url> &
 ab -n 1000 -c 100 http://<load-balancer-url> &
 ab -n 1000 -c 100 http://<load-balancer-url> &
+
+
+/health
+
